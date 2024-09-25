@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using System.Runtime.InteropServices.WindowsRuntime;
 using Unity.VisualScripting;
 using UnityEngine;
@@ -17,8 +18,6 @@ public enum Guard
 }
 public class GuardAI : MonoBehaviour
 {
-    public UnityEvent OnPursue, OnInvestigate, OnReturn, OnCaught;
-
 
     [SerializeField] GameObject pathParent;
     List<Vector3> patrolPath = new();
@@ -34,14 +33,39 @@ public class GuardAI : MonoBehaviour
 
     Guard guard;
 
-    Player target;
+    Transform target;
     Vector3 searchSpot;
 
     bool withinHearing = false, withinSight = false;
     int index = 0;
     float time = 0;
 
-    //IEnumerator currentState;
+    
+
+    public void InvestigateSpot(Vector3 position)
+    {
+        if (guard == Guard.Investigate)
+        {
+            if (Vector3.Distance(position, searchSpot) > 10)
+            {
+                searchSpot = position;
+                PathTo(searchSpot);
+            }
+        }
+        else
+        {
+            searchSpot = position;
+            SwapState(Guard.Investigate);
+        }
+    }
+    public void SpotEnemy(Transform enemy)
+    {
+        if (guard != Guard.Pursue)
+        {
+            target = enemy;
+            SwapState(Guard.Pursue);
+        }
+    }
 
     void Start()
     {
@@ -80,56 +104,31 @@ public class GuardAI : MonoBehaviour
 
     private void SwapState(Guard state)
     {
-        
+        guard = state;
 
         switch (guard)
         {
             case Guard.Patrol:
                 Debug.Log("Patrol");
-                guard = state;
                 break;
             case Guard.Investigate:
-                PathTowards(target.transform.position);
-
-                guard = state;
                 Debug.Log("Investigate");
-                OnInvestigate.Invoke();
+
+                pathNodes.Clear();
+                PathTo(searchSpot);
+
                 break;
             case Guard.Return:
-                if (!PathTowards(patrolPath[index]))
-                {
-                    SwapState(Guard.Patrol);
-                    break;
-                }
-
-                time = 0;
-                guard = state;
                 Debug.Log("Return");
-                OnReturn.Invoke();
                 break;
             case Guard.Pursue:
-                guard = state;
                 Debug.Log("Pursue");
-                OnPursue.Invoke();
                 break;
         }
     }
 
     private void Patrol()
     {
-        if (IsSeen())
-        {
-            SwapState(Guard.Pursue);
-            return;
-        }
-
-        if (IsHeard())
-        {
-            SwapState(Guard.Investigate);
-            return;
-        }
-
-        //otherwise patrol as per usual
         if (MoveTowards(patrolPath[index], maxspeed / 2))
         {
             index++;
@@ -140,15 +139,8 @@ public class GuardAI : MonoBehaviour
 
     private void Investigate()
     {
-        if (IsSeen())
-        {
-            SwapState(Guard.Pursue);
-            return;
-        }
-
         if (MoveTowards(currentNode, maxspeed / 2))
         {
-            Debug.Log(pathNodes.Count);
             if (pathNodes.Count > 0)
             {
                 currentNode = pathNodes.Dequeue();
@@ -163,23 +155,7 @@ public class GuardAI : MonoBehaviour
 
     private void Return()
     {
-        if (IsSeen())
-        {
-            SwapState(Guard.Pursue);
-            return;
-        }
-        if (IsHeard())
-        {
-            SwapState(Guard.Investigate);
-            return;
-        }
-
-        if (time < 3f)
-        {
-            time += Time.deltaTime;
-            return;
-        }
-        else if (MoveTowards(currentNode, maxspeed / 2))
+        if (MoveTowards(currentNode, maxspeed / 2))
         {
             if (pathNodes.Count > 0)
             {
@@ -195,34 +171,16 @@ public class GuardAI : MonoBehaviour
 
     private void Pursue()
     {
-        if (!IsSeen())
-        {
-            SwapState(Guard.Investigate);
-            return;
-        }
-
         if (MoveTowards(target.transform.position, maxspeed))
         {
-            if (IsSeen()) //the player has been caught
-            {
-                OnCaught.Invoke();
-                return;
-            }
-            else
-            {
-                SwapState(Guard.Investigate);
-                return;
-            }
+
         }
     }
 
-    private bool PathTowards(Vector3 position)
+    private bool PathTo(Vector3 position)
     {
-        navPath = new();
-
         if (agent.CalculatePath(position, navPath))
         {
-            pathNodes.Clear();
             foreach (Vector3 node in navPath.corners)
             {
                 pathNodes.Enqueue(node);
@@ -252,55 +210,6 @@ public class GuardAI : MonoBehaviour
         
         return false;
     }
-
-    private bool IsHeard()
-    {
-        if (withinHearing)
-        {
-            if (!target.Sneaking)
-            {
-                searchSpot = target.transform.position;
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    private bool IsSeen()
-    {
-        if (withinSight)
-        {
-            Vector3 diff = (target.transform.position - transform.position).normalized;
-            if (Vector3.Dot(diff, transform.forward) > .75f)
-            {
-                searchSpot = target.transform.position;
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    public void EnterSightRange(Player player)
-    {
-        target = player;
-        withinSight = true;
-    }
-    public void EnterHearingRange(Player player)
-    {
-        target = player;
-        withinHearing = true;
-    }
-    public void ExitSightRange(Player player)
-    {
-        withinSight = false;
-    }
-    public void ExitHearingRange(Player player)
-    {
-        withinHearing = false;
-    }
-
 
     private void OnCollisionEnter(Collision collision)
     {
