@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Runtime.InteropServices.WindowsRuntime;
+using Unity.VisualScripting;
 using UnityEngine;
 using UnityEngine.AI;
 using UnityEngine.Events;
@@ -37,6 +38,8 @@ public class GuardAI : MonoBehaviour
     Vector3 searchSpot;
 
     bool withinHearing = false, withinSight = false;
+    int index = 0;
+    float time = 0;
 
     //IEnumerator currentState;
 
@@ -51,203 +54,185 @@ public class GuardAI : MonoBehaviour
         {
             patrolPath.Add(t.position);
         }
-        SwapState(Guard.Patrol);
+
+        guard = Guard.Patrol;
     }
+
+    private void Update()
+    {
+        switch (guard)
+        {
+            case Guard.Patrol:
+                Patrol();
+                break;
+            case Guard.Investigate:
+                Investigate();
+                break;
+            case Guard.Return:
+                Return();
+                break;
+            case Guard.Pursue:
+                Pursue();
+                break;
+        }
+    }
+
 
     private void SwapState(Guard state)
     {
-        guard = state;
+        
 
         switch (guard)
         {
             case Guard.Patrol:
-                StartCoroutine(Patrol());
+                Debug.Log("Patrol");
+                guard = state;
                 break;
             case Guard.Investigate:
-                StartCoroutine(Investigate());
+                PathTowards(target.transform.position);
+
+                guard = state;
+                Debug.Log("Investigate");
+                OnInvestigate.Invoke();
                 break;
             case Guard.Return:
-                StartCoroutine(Return());
-                break;
-            case Guard.Pursue:
-                StartCoroutine(Pursue());
-                break;
-        }
-    }
-
-    private IEnumerator Patrol()
-    {
-        bool patrolling = true;
-        int index = 0;
-
-        do
-        {
-            if (IsSeen())
-            {
-                SwapState(Guard.Pursue);
-                patrolling = false;
-                yield break;
-            }
-
-            if (IsHeard())
-            {
-                SwapState(Guard.Investigate);
-                patrolling = false;
-                yield break;
-            }
-            //otherwise patrol as per usual
-
-            if (MoveTowards(patrolPath[index], maxspeed / 2))
-            {
-                yield return new WaitForSeconds(1f);
-                index++;
-                if (index == patrolPath.Count)
-                    index = 0;
-            }
-
-            yield return new WaitForFixedUpdate();
-
-        } while (patrolling);
-    }
-
-    private IEnumerator Investigate()
-    {
-        bool investigating = true;
-
-        if (agent.CalculatePath(target.transform.position, navPath))
-        {
-            foreach (Vector3 node in navPath.corners)
-            {
-                pathNodes.Enqueue(node);
-            }
-            currentNode = pathNodes.Dequeue();
-        }
-        else
-        {
-            investigating = false;
-            SwapState(Guard.Return);
-            yield break;
-        }
-
-        do
-        {
-            if (IsSeen())
-            {
-                SwapState(Guard.Pursue);
-                investigating = false;
-                yield break;
-            }
-
-            if (MoveTowards(currentNode, maxspeed / 2) && !IsHeard())
-            {
-                if (pathNodes.Count > 0)
-                {
-                    currentNode = pathNodes.Dequeue();
-                }
-                else
-                {
-                    SwapState(Guard.Return);
-                    investigating = false;
-                    yield break;
-                }
-            }
-
-            yield return new WaitForFixedUpdate();
-        } while (investigating);
-    }
-
-    private IEnumerator Return()
-    {
-        bool returning = true;
-        float time = 0;
-
-        if (agent.CalculatePath(target.transform.position, navPath))
-        {
-            foreach (Vector3 node in navPath.corners)
-            {
-                pathNodes.Enqueue(node);
-            }
-            currentNode = pathNodes.Dequeue();
-        }
-        else
-            yield break;
-
-        while (returning)
-        {
-            if (IsSeen())
-            {
-                SwapState(Guard.Pursue);
-                returning = false;
-                yield break;
-            }
-            if (IsHeard())
-            {
-                SwapState(Guard.Investigate);
-                returning = false;
-                yield break;
-            }
-
-            if (time < 3f)
-            {
-                time += Time.deltaTime;
-                yield return new WaitForEndOfFrame();
-            }
-            else if (MoveTowards(currentNode, maxspeed / 2))
-            {
-                if (pathNodes.Count > 0)
-                {
-                    currentNode = pathNodes.Dequeue();
-                }
-                else
+                if (!PathTowards(patrolPath[index]))
                 {
                     SwapState(Guard.Patrol);
-                    returning = false;
-                    yield break;
+                    break;
                 }
+
+                time = 0;
+                guard = state;
+                Debug.Log("Return");
+                OnReturn.Invoke();
+                break;
+            case Guard.Pursue:
+                guard = state;
+                Debug.Log("Pursue");
+                OnPursue.Invoke();
+                break;
+        }
+    }
+
+    private void Patrol()
+    {
+        if (IsSeen())
+        {
+            SwapState(Guard.Pursue);
+            return;
+        }
+
+        if (IsHeard())
+        {
+            SwapState(Guard.Investigate);
+            return;
+        }
+
+        //otherwise patrol as per usual
+        if (MoveTowards(patrolPath[index], maxspeed / 2))
+        {
+            index++;
+            if (index == patrolPath.Count)
+                index = 0;
+        }
+    }
+
+    private void Investigate()
+    {
+        if (IsSeen())
+        {
+            SwapState(Guard.Pursue);
+            return;
+        }
+
+        if (MoveTowards(currentNode, maxspeed / 2))
+        {
+            Debug.Log(pathNodes.Count);
+            if (pathNodes.Count > 0)
+            {
+                currentNode = pathNodes.Dequeue();
             }
             else
             {
-                yield return new WaitForFixedUpdate();
+                SwapState(Guard.Return);
+                return;
             }
-
-            yield return new WaitForEndOfFrame();
         }
     }
 
-    private IEnumerator Pursue()
+    private void Return()
     {
-        bool pursuing = true;
-        do
+        if (IsSeen())
         {
-            if (!IsSeen())
+            SwapState(Guard.Pursue);
+            return;
+        }
+        if (IsHeard())
+        {
+            SwapState(Guard.Investigate);
+            return;
+        }
+
+        if (time < 3f)
+        {
+            time += Time.deltaTime;
+            return;
+        }
+        else if (MoveTowards(currentNode, maxspeed / 2))
+        {
+            if (pathNodes.Count > 0)
             {
-                SwapState(Guard.Investigate);
-                pursuing = false;
-                yield break;
+                currentNode = pathNodes.Dequeue();
             }
-
-            if (MoveTowards(target.transform.position, maxspeed))
+            else
             {
-                if (IsSeen()) //the player has been caught
-                {
-                    OnCaught.Invoke();
-                    pursuing = false;
-                    yield break;
-                }
-                else
-                {
-                    SwapState(Guard.Investigate);
-                    pursuing = false;
-                    yield break;
-                }
+                SwapState(Guard.Patrol);
+                return;
             }
-
-            yield return new WaitForFixedUpdate();
-        } while (pursuing);
-
-        yield return new WaitForEndOfFrame();
+        }
     }
 
+    private void Pursue()
+    {
+        if (!IsSeen())
+        {
+            SwapState(Guard.Investigate);
+            return;
+        }
+
+        if (MoveTowards(target.transform.position, maxspeed))
+        {
+            if (IsSeen()) //the player has been caught
+            {
+                OnCaught.Invoke();
+                return;
+            }
+            else
+            {
+                SwapState(Guard.Investigate);
+                return;
+            }
+        }
+    }
+
+    private bool PathTowards(Vector3 position)
+    {
+        navPath = new();
+
+        if (agent.CalculatePath(position, navPath))
+        {
+            pathNodes.Clear();
+            foreach (Vector3 node in navPath.corners)
+            {
+                pathNodes.Enqueue(node);
+            }
+            currentNode = pathNodes.Dequeue();
+            return true;
+        }
+
+        return false;
+    }
     
     private bool MoveTowards(Vector3 position, float speed) //true if it has reached its destination
     {
@@ -289,7 +274,6 @@ public class GuardAI : MonoBehaviour
             Vector3 diff = (target.transform.position - transform.position).normalized;
             if (Vector3.Dot(diff, transform.forward) > .75f)
             {
-                Debug.Log("seen");
                 searchSpot = target.transform.position;
                 return true;
             }
@@ -323,6 +307,18 @@ public class GuardAI : MonoBehaviour
         if (collision.gameObject.layer == 3)
         {
             SceneManager.LoadScene(0);
+        }
+    }
+
+
+    private void OnDrawGizmos()
+    {
+        if (navPath == null)
+            return;
+        Gizmos.color = Color.red;
+        foreach (Vector3 node in navPath.corners)
+        {
+            Gizmos.DrawWireSphere(node, 1);
         }
     }
 }

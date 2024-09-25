@@ -73,19 +73,16 @@ public class Player : MonoBehaviour
     private void Sneak(InputAction.CallbackContext ctx)
     {
         if (ctx.canceled)
+        {
             speed *= 3;
+            Sneaking = false;
+        }
         else
+        {
             speed /= 3f;
+            Sneaking = true;
+        }
 
-        rb.velocity /= 3;
-    }
-
-    private void Pause(InputAction.CallbackContext ctx)
-    {
-        if (Cursor.lockState == CursorLockMode.Locked)
-            Cursor.lockState = CursorLockMode.None;
-        else
-            Cursor.lockState = CursorLockMode.Locked;
     }
 
     private void OnCollisionEnter(Collision collision)
