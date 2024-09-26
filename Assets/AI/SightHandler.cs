@@ -18,13 +18,14 @@ public class SightHandler : MonoBehaviour
         if (inRange)
         {
             Vector3 diff = (player.position - transform.position).normalized;
-            //Debug.Log(Vector3.Dot(diff, transform.forward));
+            Debug.Log(Vector3.Dot(diff, transform.forward));
 
             if (Vector3.Dot(diff, transform.forward) > .85f && Unobstructed(player.position))
             {
                 if (!spotted)
                     GainedSight.Invoke(player);
                 spotted = true;
+                
             }
             else if (spotted)
             {
@@ -58,7 +59,7 @@ public class SightHandler : MonoBehaviour
 
     private void OnTriggerExit(Collider other)
     {
-        if (other.gameObject.layer == 3)
+        if (other.gameObject.layer == 3 && spotted)
         {
             LostSight.Invoke(player.position);
             spotted = false;
