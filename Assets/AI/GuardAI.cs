@@ -18,6 +18,8 @@ public enum Guard
 }
 public class GuardAI : MonoBehaviour
 {
+    public UnityEvent<Guard> OnSwapState;
+
 
     [SerializeField] GameObject pathParent;
     List<Vector3> patrolPath = new();
@@ -105,6 +107,7 @@ public class GuardAI : MonoBehaviour
     private void SwapState(Guard state)
     {
         guard = state;
+        OnSwapState.Invoke(guard);
 
         switch (guard)
         {
