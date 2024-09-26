@@ -43,7 +43,7 @@ public class HearingHandler : MonoBehaviour
         StaticPlayerInput.Input.Player.Sneaking.canceled += Sneak;
     }
 
-    private void FixedUpdate()
+    private void Update()
     {
         if (!sneaking && inRange && !withinSight) 
         { 

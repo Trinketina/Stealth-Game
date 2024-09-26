@@ -13,7 +13,7 @@ public class SightHandler : MonoBehaviour
     bool inRange = false;
     Transform player;
 
-    void FixedUpdate()
+    void Update()
     {
         if (inRange)
         {

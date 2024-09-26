@@ -13,6 +13,7 @@ public enum Guard
 {
     Patrol,
     Investigate,
+    Inspect,
     Return,
     Pursue
 }
@@ -38,16 +39,19 @@ public class GuardAI : MonoBehaviour
     Transform target;
     Vector3 searchSpot;
 
-    bool withinHearing = false, withinSight = false;
+    Quaternion lookLeft;
+    Quaternion lookRight;
+
     int index = 0;
     float time = 0;
-
-    
+    [SerializeField] float waitFor;
+    [SerializeField] float interpolation;
 
     public void InvestigateSpot(Vector3 position)
     {
         if (guard == Guard.Investigate)
         {
+            time = 0;
             searchSpot = position;
             pathNodes.Clear();
             PathTo(searchSpot);
@@ -92,6 +96,9 @@ public class GuardAI : MonoBehaviour
             case Guard.Investigate:
                 Investigate();
                 break;
+            case Guard.Inspect:
+                Inspect(); 
+                break;
             case Guard.Return:
                 Return();
                 break;
@@ -105,6 +112,7 @@ public class GuardAI : MonoBehaviour
     private void SwapState(Guard state)
     {
         guard = state;
+        time = 0;
         OnSwapState.Invoke(guard);
 
         switch (guard)
@@ -116,14 +124,28 @@ public class GuardAI : MonoBehaviour
                 Debug.Log("Investigate");
 
                 pathNodes.Clear();
-                PathTo(searchSpot);
+
+                if (!PathTo(searchSpot))
+                    SwapState(Guard.Return);
+
+                break;
+            case Guard.Inspect:
+                Debug.Log("Inspect");
+
+                lookLeft = transform.rotation;
+                lookLeft.y -= Quaternion.Euler(0, 30f, 0).y;
+
+                lookRight = transform.rotation;
+                lookRight.y += Quaternion.Euler(0, 30f, 0).y;
+
 
                 break;
             case Guard.Return:
                 Debug.Log("Return");
 
                 pathNodes.Clear();
-                PathTo(patrolPath[index]);
+                if (!PathTo(patrolPath[index]))
+                    SwapState(Guard.Patrol);
 
                 break;
             case Guard.Pursue:
@@ -139,11 +161,21 @@ public class GuardAI : MonoBehaviour
             index++;
             if (index == patrolPath.Count)
                 index = 0;
+
+            SwapState(Guard.Inspect);
         }
     }
 
     private void Investigate()
     {
+        if (time < waitFor / 2)
+        {
+            rb.velocity = Vector3.zero;
+            transform.rotation = Quaternion.Lerp(transform.rotation,
+                Quaternion.LookRotation((searchSpot - transform.position).normalized, Vector3.zero), interpolation);
+            time += Time.deltaTime;
+            return;
+        }
         if (MoveTowards(currentNode, maxspeed / 2))
         {
             if (pathNodes.Count > 0)
@@ -152,14 +184,44 @@ public class GuardAI : MonoBehaviour
             }
             else
             {
-                SwapState(Guard.Return);
+                time = 0;
+                SwapState(Guard.Inspect);
                 return;
             }
         }
     }
 
+    private void Inspect()
+    {
+
+        if (time < waitFor / 2)
+        {
+            transform.rotation = Quaternion.Slerp(transform.rotation, lookLeft, interpolation);
+            time += Time.deltaTime;
+        }
+        else if (time < waitFor)
+        {
+            transform.rotation = Quaternion.Slerp(transform.rotation, lookRight, interpolation);
+            time += Time.deltaTime;
+        }
+        else
+        {
+            time = 0;
+            SwapState(Guard.Return);
+        }
+    }
+
     private void Return()
     {
+        if (time < waitFor / 2)
+        {
+            rb.velocity = Vector3.zero;
+            transform.rotation = Quaternion.Lerp(transform.rotation, 
+                Quaternion.LookRotation((patrolPath[index] - transform.position).normalized, Vector3.zero), interpolation);
+            time += Time.deltaTime;
+            return;
+        }
+
         if (MoveTowards(currentNode, maxspeed / 2))
         {
             if (pathNodes.Count > 0)
@@ -169,6 +231,7 @@ public class GuardAI : MonoBehaviour
             else
             {
                 SwapState(Guard.Patrol);
+                time = 0;
                 return;
             }
         }
@@ -215,15 +278,6 @@ public class GuardAI : MonoBehaviour
         
         return false;
     }
-
-    private void OnCollisionEnter(Collision collision)
-    {
-        if (collision.gameObject.layer == 3)
-        {
-            SceneManager.LoadScene(0);
-        }
-    }
-
 
     private void OnDrawGizmos()
     {
