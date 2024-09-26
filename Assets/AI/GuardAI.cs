@@ -48,11 +48,9 @@ public class GuardAI : MonoBehaviour
     {
         if (guard == Guard.Investigate)
         {
-            if (Vector3.Distance(position, searchSpot) > 10)
-            {
-                searchSpot = position;
-                PathTo(searchSpot);
-            }
+            searchSpot = position;
+            pathNodes.Clear();
+            PathTo(searchSpot);
         }
         else
         {
@@ -123,6 +121,10 @@ public class GuardAI : MonoBehaviour
                 break;
             case Guard.Return:
                 Debug.Log("Return");
+
+                pathNodes.Clear();
+                PathTo(patrolPath[index]);
+
                 break;
             case Guard.Pursue:
                 Debug.Log("Pursue");

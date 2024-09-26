@@ -9,11 +9,13 @@ public class HearingHandler : MonoBehaviour
 {
     public UnityEvent<Vector3> HeardSomething;
 
-    [SerializeField] Transform player;
-    [SerializeField] float range;
-
     bool sneaking = false;
+    bool inRange = false;
     bool withinSight = false;
+
+    Transform player;
+    Vector3 lastPosition = new();
+
     public void Sneak(InputAction.CallbackContext ctx)
     {
         if (ctx.canceled)
@@ -41,17 +43,52 @@ public class HearingHandler : MonoBehaviour
         StaticPlayerInput.Input.Player.Sneaking.canceled += Sneak;
     }
 
-    void Update()
+    private void FixedUpdate()
     {
-        Debug.Log(Vector3.Distance(transform.position, player.position));
-        if (Vector3.Distance(transform.position, player.position) < range && !sneaking && !withinSight) 
-        {
-            HeardSomething.Invoke(player.position);
-        } 
+        if (!sneaking && inRange && !withinSight) 
+        { 
+            if (Vector3.Distance(player.position, lastPosition) > 3 && Unobstructed(player.position))
+            {
+                lastPosition = player.position;
+                HeardSomething.Invoke(lastPosition);
+            }
+        }
+
     }
+
+    private bool Unobstructed(Vector3 position)
+    {
+        Vector3 dir = (position - transform.position).normalized;
+        float distance = Vector3.Distance(transform.position, position) + 5f;
+        RaycastHit hit;
+        if (Physics.Raycast(transform.position, dir, out hit, distance))
+        {
+            if (hit.transform.GetComponent<Player>() != null)
+                return true;
+        }
+        return false;
+    }
+
 
     private void OnTriggerEnter(Collider other)
     {
-        //if a thrown thing enters the trigger, invoke UpdateLastHeard
+        if (other.gameObject.layer == 3)
+        {
+            player = other.transform;
+            inRange = true;
+
+        }
+        else if (other.gameObject.layer == 8)
+        {
+            lastPosition = other.transform.position;
+            HeardSomething.Invoke(lastPosition);
+        }
+    }
+    private void OnTriggerExit(Collider other)
+    {
+        if (other.gameObject.layer == 3)
+        {
+            inRange = false;
+        }
     }
 }
